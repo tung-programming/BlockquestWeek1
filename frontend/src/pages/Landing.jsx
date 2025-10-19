@@ -9,7 +9,8 @@ export default function Landing() {
     const section = document.getElementById("features");
     section?.scrollIntoView({ behavior: "smooth" });
   };
-  
+  <div className="bg-red-500 text-white p-4">TAILWIND TEST</div>
+
   return (
     
     <div className="bg-[#0d0d0d] text-white min-h-screen flex flex-col font-sans">

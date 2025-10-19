@@ -15,7 +15,6 @@ export default function App(){
         <Route path="/feed" element={<FeedPage/>} />
         <Route path="/post/:id" element={<PostDetail/>} />
         <Route path="/profile/:uid" element={<ProfilePage/>} />
-        <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
