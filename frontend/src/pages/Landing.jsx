@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import {
   FaUsers,
   FaShieldAlt,
@@ -70,25 +71,11 @@ export default function Landing() {
             className="focus:outline-none text-gray-300 hover:text-indigo-400 transition"
           >
             {menuOpen ? (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={2}
-                stroke="currentColor"
-                className="w-6 h-6"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             ) : (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={2}
-                stroke="currentColor"
-                className="w-6 h-6"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             )}
@@ -98,10 +85,7 @@ export default function Landing() {
         {/* Desktop Nav */}
         <ul className="hidden md:flex space-x-8 text-gray-300">
           <li className="hover:text-indigo-400 cursor-pointer transition">Home</li>
-          <li
-            className="hover:text-indigo-400 cursor-pointer transition"
-            onClick={handleKnowMore}
-          >
+          <li className="hover:text-indigo-400 cursor-pointer transition" onClick={handleKnowMore}>
             Features
           </li>
           <li className="hover:text-indigo-400 cursor-pointer transition">
@@ -150,19 +134,41 @@ export default function Landing() {
         </div>
       )}
 
-      {/* Hero Section */}
-      <section className="flex flex-col items-center justify-center flex-grow text-center py-12 md:py-16 px-6 md:px-16">
-        <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold mb-4 leading-tight bg-gradient-to-r from-white via-indigo-400 to-indigo-600 bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(99,102,241,0.3)]">
+      {/* Hero Section with motion */}
+      <motion.section
+        className="flex flex-col items-center justify-center flex-grow text-center py-12 md:py-16 px-6 md:px-16"
+        initial={{ opacity: 0, y: 50 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 1, ease: "easeOut" }}
+      >
+        <motion.h2
+          className="text-4xl sm:text-5xl md:text-6xl font-extrabold mb-4 leading-tight bg-gradient-to-r from-white via-indigo-400 to-indigo-600 bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(99,102,241,0.3)]"
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.8 }}
+        >
           Spot. Report. Block. <br />
           <span className="text-indigo-400 drop-shadow-[0_0_15px_rgba(99,102,241,0.6)]">
             Together.
           </span>
-        </h2>
-        <p className="max-w-2xl text-gray-300 mb-8 text-base sm:text-lg tracking-wide drop-shadow-[0_1px_6px_rgba(255,255,255,0.1)]">
+        </motion.h2>
+
+        <motion.p
+          className="max-w-2xl text-gray-300 mb-8 text-base sm:text-lg tracking-wide drop-shadow-[0_1px_6px_rgba(255,255,255,0.1)]"
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6, duration: 0.8 }}
+        >
           Join the community-powered platform that detects and verifies phishing threats through
           collective intelligence — where every upvote secures the web.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4">
+        </motion.p>
+
+        <motion.div
+          className="flex flex-col sm:flex-row gap-4"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.9, duration: 0.6 }}
+        >
           <button
             onClick={handleExplore}
             className="px-8 py-3 bg-gradient-to-r from-indigo-500 to-indigo-700 text-white rounded-lg font-semibold shadow-[0_0_15px_rgba(99,102,241,0.6)] hover:shadow-[0_0_25px_rgba(99,102,241,0.8)] transition-all duration-300"
@@ -175,13 +181,17 @@ export default function Landing() {
           >
             Know More
           </button>
-        </div>
-      </section>
+        </motion.div>
+      </motion.section>
 
-      {/* Features Section */}
-      <section
+      {/* Features Section with motion */}
+      <motion.section
         id="features"
-        className="py-12  px-6 sm:px-10 bg-gradient-to-b from-[#0b0b0b]/70 to-[#050505]/90 border-t border-gray-800 relative"
+        className="py-12 px-6 sm:px-10 bg-gradient-to-b from-[#0b0b0b]/70 to-[#050505]/90 border-t border-gray-800 relative"
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        transition={{ duration: 1 }}
+        viewport={{ once: true }}
       >
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(99,102,241,0.15),transparent)] pointer-events-none"></div>
 
@@ -194,22 +204,26 @@ export default function Landing() {
           {features.map((f, i) => {
             const Icon = f.icon;
             return (
-              <div
+              <motion.div
                 key={i}
                 className="relative bg-[#0b0b0c]/80 border border-transparent rounded-2xl p-[1px] hover:-translate-y-1 transition-all duration-500 hover:shadow-[0_0_25px_rgba(99,102,241,0.4)] before:absolute before:inset-0 before:rounded-2xl before:p-[1px] before:bg-gradient-to-r before:from-indigo-500 before:via-purple-500 before:to-blue-600 before:opacity-0 hover:before:opacity-100 before:transition-opacity before:duration-500 animate-[float_4s_ease-in-out_infinite]"
+                initial={{ opacity: 0, y: 40 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: i * 0.1 }}
+                viewport={{ once: true }}
               >
                 <div className="relative z-10 bg-[#121212]/90 rounded-2xl p-6 text-center">
                   <Icon className="text-indigo-400 text-3xl mb-3 mx-auto" />
                   <h4 className="text-xl font-semibold mb-3 text-white">{f.title}</h4>
                   <p className="text-gray-400 text-sm">{f.desc}</p>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
-      </section>
+      </motion.section>
 
-      {/* Footer / About */}
+      {/* Footer */}
       <footer
         id="about"
         className="bg-gradient-to-t from-[#0b0b0b] to-[#0f0f1a] border-t border-indigo-900/50 text-gray-400 text-center py-10 px-6"
