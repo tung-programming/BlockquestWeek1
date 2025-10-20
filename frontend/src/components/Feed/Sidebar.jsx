@@ -21,7 +21,7 @@ import {useAuth} from "../../hooks/useAuth";
  * Desktop: always visible (left column)
  * Mobile : toggled drawer via Navbar
  */
-export default function Sidebar({ open = false, onClose = () => {} }) {
+export default function Sidebar({ open = false, onClose = () => {},onCreate }) {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -48,9 +48,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
           return (
             <button
               key={idx}
-              onClick={() => {
-                if (to) navigate(to);
-              }}
+              onClick={onCreate}
               className="w-full flex items-center gap-3 px-3 py-3 rounded-md hover:bg-[#0f1118]/50 transition"
             >
               <Icon className="text-lg text-indigo-400" />

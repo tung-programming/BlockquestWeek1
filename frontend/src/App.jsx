@@ -6,6 +6,7 @@ import PostDetail from "./pages/PostDetail";
 import ProfilePage from "./pages/ProfilePage";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import PostForm from "./components/Feed/PostForm";
 
 export default function App(){
   return (
@@ -17,6 +18,7 @@ export default function App(){
         <Route path="/profile/:uid" element={<ProfilePage/>} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/post/create" element={<PostForm />} />
 
       </Routes>
     </BrowserRouter>

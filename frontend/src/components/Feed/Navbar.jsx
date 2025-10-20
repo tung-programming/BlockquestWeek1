@@ -17,7 +17,7 @@ import { auth } from "../../firebase/firebase";
  * Props:
  * - onToggleSidebar: function to open the left drawer on mobile
  */
-export default function Navbar({ onToggleSidebar }) {
+export default function Navbar({ onToggleSidebar, onCreate }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -72,7 +72,7 @@ export default function Navbar({ onToggleSidebar }) {
           {/* Right: actions */}
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate("/post/create")}
+              onClick={onCreate}
               className="hidden md:inline-block px-3 py-1 rounded-md bg-gradient-to-r from-indigo-600 to-indigo-500 text-white font-medium hover:shadow-[0_0_15px_rgba(99,102,241,0.4)] transition"
             >
               Create

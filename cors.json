@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["http://localhost:5173", "https://phishblock-demo.web.app", "https://your-domain.com"],
+    "method": ["GET", "HEAD", "PUT", "POST", "DELETE"],
+    "responseHeader": ["Content-Type", "x-goog-meta-*", "x-goog-acl", "Authorization"],
+    "maxAgeSeconds": 3600
+  }
+]
