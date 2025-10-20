@@ -12,5 +12,6 @@ module.exports = {
     float: 'float 4s ease-in-out infinite',
   },
 } },
-  plugins: [],
+  plugins: [require('tailwind-scrollbar')],
+
 };
