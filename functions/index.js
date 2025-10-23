@@ -1,7 +1,18 @@
 /**
- * ✅ PhishBlock — Automated Archival & Cleanup
- * Anchors verified phishing reports to Polygon and archives to IPFS
- * with Web3.Storage + Pinata fallback and Firestore cleanup.
+ * functions/index.js
+ * Automated anchoring + archival (metadata-only, no images).
+ *
+ * Requirements in functions/.env or cloud functions env:
+ * - BLOCKCHAIN_RPC
+ * - BLOCKCHAIN_PRIVATE_KEY
+ * - BLOCKCHAIN_CONTRACT_ADDRESS
+ * - NFT_TOKEN          (Web3.Storage)
+ * - PINATA_JWT         (Pinata JWT, optional but recommended)
+ * - VOTE_THRESHOLD     (default 10)
+ *
+ * Notes:
+ * - This file preserves createdAt on the post so feeds ordered by createdAt still include archived posts.
+ * - The metadata uploaded to IPFS will include snapshotText (trimmed), headers, redirectChain, status, snapshotHtmlHash.
  */
 
 const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
@@ -10,16 +21,18 @@ const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { ethers } = require("ethers");
 const { Web3Storage, File } = require("web3.storage");
-// ⚙️ Universal fetch fix for Firebase Node runtimes
-const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const FormData = require("form-data");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
-// 🧩 Initialize Firebase Admin
+// dynamic fetch for Node runtime compatibility
+const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
+
+// init firebase admin
 initializeApp();
 
-// ====== 🔧 ENVIRONMENT VARIABLES ======
+// ENV
 const RPC_URL = process.env.BLOCKCHAIN_RPC || "";
 const PRIVATE_KEY = process.env.BLOCKCHAIN_PRIVATE_KEY || "";
 const CONTRACT_ADDRESS = process.env.BLOCKCHAIN_CONTRACT_ADDRESS || "";
@@ -28,26 +41,35 @@ const PINATA_JWT = process.env.PINATA_JWT || "";
 const VOTE_THRESHOLD = parseInt(process.env.VOTE_THRESHOLD || "10", 10);
 
 const CONTRACT_ABI = [
-  "function anchor(bytes32 _hash, string calldata postId) public returns (bool)",
+  "function anchor(bytes32 _hash, string calldata postId) public returns (bool)"
 ];
 
-// ====== 🔥 FIRESTORE TRIGGER ======
+// small helper: sha256 hex with 0x prefix
+function sha256Hex(bufferOrStr) {
+  const buf = Buffer.isBuffer(bufferOrStr) ? bufferOrStr : Buffer.from(String(bufferOrStr));
+  return "0x" + crypto.createHash("sha256").update(buf).digest("hex");
+}
+
+// trim string to n bytes safely
+function trimToBytes(str = "", bytes = 8192) {
+  const buf = Buffer.from(str);
+  if (buf.length <= bytes) return str;
+  return buf.slice(0, bytes).toString("utf8") + "...[truncated]";
+}
+
 exports.onPostUpdate = onDocumentUpdated(
-  {
-    document: "posts/{postId}",
-    region: "asia-south1",
-  },
+  { document: "posts/{postId}", region: "asia-south1" },
   async (event) => {
     const db = getFirestore();
     const newData = event.data.after.data();
     const oldData = event.data.before.data();
     const postId = event.params.postId;
 
-    if (!oldData.anchored && (newData.upvotes || 0) >= VOTE_THRESHOLD) {
-      logger.info(`🚀 Anchoring and archiving post ${postId}...`);
-
+    // Only run when crossing threshold and not already anchored
+    if (!oldData?.anchored && (newData?.upvotes || 0) >= VOTE_THRESHOLD) {
+      logger.info `🚀 Anchoring and archiving post ${postId}...`;
       try {
-        // 1️⃣ Blockchain anchoring
+        // 1) Anchor on-chain
         const provider = new ethers.JsonRpcProvider(RPC_URL);
         const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
         const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, wallet);
@@ -57,107 +79,151 @@ exports.onPostUpdate = onDocumentUpdated(
         await tx.wait();
         logger.info(`✅ Anchored post ${postId}, tx: ${tx.hash}`);
 
-        // 2️⃣ Prepare metadata
+        // 2) Snapshot fetch the target URL (server-side) to capture evidence
+        let snapshotText = "";
+        let httpStatus = null;
+        let headers = {};
+        let finalUrl = newData.url || "";
+        let redirectChain = [];
+
+        try {
+          const res = await fetch(newData.url, { redirect: "follow", timeout: 15000 });
+          httpStatus = res.status;
+          // gather headers of interest
+          res.headers.forEach((v, k) => {
+            headers[k] = v;
+          });
+          finalUrl = res.url || finalUrl;
+          // redirectChain is not directly exposed by fetch; attempt to reconstruct from headers/location or use finalUrl
+          // We'll set redirectChain as [original, final]
+          redirectChain = [newData.url, finalUrl];
+
+          const text = await res.text();
+          snapshotText = trimToBytes(text, 8 * 1024); // first 8KB
+        } catch (fetchErr) {
+          logger.warn(`⚠️ Snapshot fetch failed for ${postId}: ${fetchErr?.message || fetchErr}`);
+          // keep snapshotText empty, but proceed — archival still useful (with description)
+        }
+
+        // 3) Build metadata (no image)
         const metadata = {
           postId,
           url: newData.url || "",
+          description: newData.description || "",
+          authorId: newData.authorId || "",
+          authorName: newData.authorName || "Anonymous",
+          reportedAt: newData.createdAt?.toDate ? newData.createdAt.toDate().toISOString() : (newData.createdAt || new Date().toISOString()),
+          httpStatus,
+          redirectChain,
+          headers,
+          snapshotText,
+          snapshotHtmlHash: snapshotText ? sha256Hex(snapshotText) : null,
           upvotes: newData.upvotes || 0,
           downvotes: newData.downvotes || 0,
           anchored: true,
           anchorTx: tx.hash,
-          createdAt: newData.createdAt || new Date().toISOString(),
+          archivedAt: new Date().toISOString()
         };
 
-        // Fetch image for IPFS
-        let imageBuffer = null;
-        if (newData.imageURL) {
-          try {
-            const imgRes = await fetch(newData.imageURL);
-            if (imgRes.ok) {
-              imageBuffer = Buffer.from(await imgRes.arrayBuffer());
-            }
-          } catch (e) {
-            logger.error(`⚠️ Failed to fetch image for ${postId}:`, e);
-          }
-        }
+        // compute evidenceHash (hash of the JSON metadata)
+        const evidenceHash = sha256Hex(JSON.stringify(metadata));
+        metadata.evidenceHash = evidenceHash;
 
+        // prepare upload: single metadata.json
         const files = [new File([JSON.stringify(metadata, null, 2)], "metadata.json")];
-        if (imageBuffer) {
-          files.push(new File([imageBuffer], "proof.jpg"));
-        }
 
-        // 3️⃣ Upload to Web3.Storage (primary)
-        const client = new Web3Storage({ token: NFT_TOKEN });
+        // 4) upload primary -> Web3.Storage
         let cid = null;
-
+        const w3 = new Web3Storage({ token: NFT_TOKEN });
         try {
-          cid = await client.put(files, { wrapWithDirectory: false });
-          logger.info(`📦 Uploaded to Web3.Storage: ${cid}`);
-        } catch (err) {
-          logger.error(`❌ Web3.Storage upload failed:`, err);
+          logger.info(`📦 Uploading metadata.json to Web3.Storage for ${postId}...`);
+          cid = await w3.put(files, { wrapWithDirectory: false });
+          logger.info(`✅ Web3.Storage CID: ${cid}`);
+        } catch (w3err) {
+          logger.warn(`❌ Web3.Storage upload failed: ${w3err?.message || w3err}`);
+          // fallback -> Pinata
+          if (!PINATA_JWT) {
+            // Record error and bail (but keep anchored true with anchorTx saved)
+            logger.error("❌ No PINATA_JWT available; cannot fallback.");
+            await db.collection("posts").doc(postId).update({
+              anchored: true,
+              anchorTx: tx.hash,
+              anchoringError: true,
+              lastError: `Web3.Storage failed: ${w3err?.message || w3err}`,
+              lastErrorAt: FieldValue.serverTimestamp(),
+            });
+            return;
+          }
 
-          // 4️⃣ Fallback to Pinata
-          if (!PINATA_JWT) throw new Error("No Pinata JWT provided");
           try {
-            const tempFile = path.join("/tmp", `${postId}-metadata.json`);
-            fs.writeFileSync(tempFile, JSON.stringify(metadata, null, 2));
-
+            logger.info(`🔁 Attempting Pinata fallback for ${postId}...`);
+            const tempPath = path.join("/tmp", `${postId}-metadata.json`);
+            fs.writeFileSync(tempPath, JSON.stringify(metadata, null, 2), "utf8");
             const form = new FormData();
-            form.append("file", fs.createReadStream(tempFile));
+            form.append("file", fs.createReadStream(tempPath));
+            // pinFileToIPFS by Pinata
             const res = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
               method: "POST",
               headers: { Authorization: `Bearer ${PINATA_JWT}` },
               body: form,
             });
             const data = await res.json();
-            fs.unlinkSync(tempFile);
-
+            fs.unlinkSync(tempPath);
             if (!res.ok || !data.IpfsHash) {
               throw new Error("Pinata upload failed: " + JSON.stringify(data));
             }
             cid = data.IpfsHash;
-            logger.info(`✅ Pinata fallback success: ${cid}`);
-          } catch (fallbackErr) {
-            logger.error(`❌ Both Web3.Storage and Pinata failed:`, fallbackErr);
+            logger.info(`✅ Pinata CID: ${cid}`);
+          } catch (pinErr) {
+            logger.error(`❌ Pinata fallback also failed: ${pinErr?.message || pinErr}`);
             await db.collection("posts").doc(postId).update({
               anchored: true,
               anchorTx: tx.hash,
               anchoringError: true,
-              lastError: fallbackErr.message,
+              lastError: `Web3.Storage: ${w3err?.message || w3err} | Pinata: ${pinErr?.message || pinErr}`,
               lastErrorAt: FieldValue.serverTimestamp(),
             });
             return;
           }
         }
 
-        // 5️⃣ Construct gateway links
+        // 5) build gateway links & store minimal doc (preserving createdAt)
         const ipfsGateway = `https://gateway.pinata.cloud/ipfs/${cid}`;
+        const ipfsMetadata = `${ipfsGateway}/metadata.json`;
         const backupLink = `https://w3s.link/ipfs/${cid}`;
+        const anchorTxUrl = `https://amoy.polygonscan.com/tx/${tx.hash}`;
 
-        // 6️⃣ Cleanup Firestore document
         const minimalData = {
           url: newData.url || "",
           anchored: true,
           anchorTx: tx.hash,
+          anchorTxUrl,
           archiveCid: cid,
-          archivedAt: FieldValue.serverTimestamp(),
           ipfsGateway,
+          ipfsMetadata,
           backupLink,
+          evidenceHash,
+          archivedAt: FieldValue.serverTimestamp(),
           upvotes: newData.upvotes || 0,
           downvotes: newData.downvotes || 0,
+          createdAt: newData.createdAt || FieldValue.serverTimestamp(), // preserve createdAt for ordering in feeds
         };
 
+        // Overwrite doc but keep createdAt by setting it in minimalData
         await db.collection("posts").doc(postId).set(minimalData, { merge: false });
 
-        logger.info(`🧹 Firestore cleaned and updated for post ${postId}`);
-
+        logger.info(`🧹 Firestore cleaned & updated for post ${postId} (cid: ${cid})`);
       } catch (err) {
-        logger.error(`❌ Error in anchoring/archive for ${postId}:`, err);
-        await getFirestore().collection("posts").doc(postId).update({
-          anchoringError: true,
-          lastError: err.message || "Unknown failure",
-          lastErrorAt: FieldValue.serverTimestamp(),
-        });
+        logger.error(`❌ Error processing post ${postId}: ${err?.message || err}`);
+        try {
+          await getFirestore().collection("posts").doc(postId).update({
+            anchoringError: true,
+            lastError: err?.message || "Unknown error",
+            lastErrorAt: FieldValue.serverTimestamp(),
+          });
+        } catch (uerr) {
+          logger.error("❌ Failed to mark anchoringError on Firestore:", uerr?.message || uerr);
+        }
       }
     } else {
       logger.debug(`ℹ️ Skipping post ${postId} — below threshold or already anchored.`);

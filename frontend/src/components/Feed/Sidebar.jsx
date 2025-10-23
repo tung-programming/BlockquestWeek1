@@ -9,19 +9,12 @@ import {
   FaShieldAlt,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import {useAuth} from "../../hooks/useAuth";
+import { useAuth } from "../../hooks/useAuth";
 
 /**
  * Sidebar (collapsible)
- *
- * Props:
- * - open (boolean) : whether drawer is open (mobile)
- * - onClose (fn)   : called to close the drawer
- *
- * Desktop: always visible (left column)
- * Mobile : toggled drawer via Navbar
  */
-export default function Sidebar({ open = false, onClose = () => {},onCreate }) {
+export default function Sidebar({ open = false, onClose = () => {}, onCreate }) {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -48,7 +41,13 @@ export default function Sidebar({ open = false, onClose = () => {},onCreate }) {
           return (
             <button
               key={idx}
-              onClick={onCreate}
+              onClick={() => {
+                if (it.label === "Create Post") {
+                  if (typeof onCreate === "function") onCreate();
+                } else {
+                  navigate(to);
+                }
+              }}
               className="w-full flex items-center gap-3 px-3 py-3 rounded-md hover:bg-[#0f1118]/50 transition"
             >
               <Icon className="text-lg text-indigo-400" />
@@ -89,7 +88,6 @@ export default function Sidebar({ open = false, onClose = () => {},onCreate }) {
     </div>
   );
 
-  // Desktop visible: a glass panel left column
   return (
     <>
       {/* Desktop fixed sidebar */}
@@ -103,20 +101,8 @@ export default function Sidebar({ open = false, onClose = () => {},onCreate }) {
       <AnimatePresence>
         {open && (
           <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={onClose}
-              className="fixed inset-0 z-40 bg-black/40 md:hidden"
-            />
-            <motion.aside
-              initial={{ x: -320 }}
-              animate={{ x: 0 }}
-              exit={{ x: -320 }}
-              transition={{ type: "spring", stiffness: 260, damping: 26 }}
-              className="fixed left-0 top-0 bottom-0 z-50 w-72 bg-[#07070a]/95 backdrop-blur-sm border-r border-gray-800 md:hidden"
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-40 bg-black/40 md:hidden" />
+            <motion.aside initial={{ x: -320 }} animate={{ x: 0 }} exit={{ x: -320 }} transition={{ type: "spring", stiffness: 260, damping: 26 }} className="fixed left-0 top-0 bottom-0 z-50 w-72 bg-[#07070a]/95 backdrop-blur-sm border-r border-gray-800 md:hidden">
               <div className="h-full overflow-y-auto">{content}</div>
             </motion.aside>
           </>

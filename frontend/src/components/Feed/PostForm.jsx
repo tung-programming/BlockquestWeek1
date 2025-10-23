@@ -1,12 +1,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { db } from "../../firebase/firebase";
-import {
-  collection,
-  addDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { useAuth } from "../../hooks/useAuth";
 import { FaTimes } from "react-icons/fa";
 
@@ -14,10 +9,7 @@ export default function PostForm({ open, onClose }) {
   const { user } = useAuth();
   const [url, setUrl] = useState("");
   const [description, setDescription] = useState("");
-  const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  const storage = getStorage();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,24 +19,13 @@ export default function PostForm({ open, onClose }) {
       alert("Please fill in both URL and description.");
       return;
     }
-    if (!image) {
-      alert("Please attach a proof image before submitting!");
-      return;
-    }
 
     setLoading(true);
     try {
-      let imageURL = "";
-      if (image) {
-        const imgRef = ref(storage, `postImages/${Date.now()}-${image.name}`);
-        await uploadBytes(imgRef, image);
-        imageURL = await getDownloadURL(imgRef);
-      }
-
       await addDoc(collection(db, "posts"), {
         url,
         description,
-        imageURL,
+        // no image
         authorId: user.uid,
         authorName: user.displayName || user.email.split("@")[0],
         upvotes: 0,
@@ -54,10 +35,8 @@ export default function PostForm({ open, onClose }) {
         createdAt: serverTimestamp(),
       });
 
-    //   alert("Phishing report submitted successfully!");
       setUrl("");
       setDescription("");
-      setImage(null);
       onClose();
     } catch (err) {
       console.error(err);
@@ -96,9 +75,7 @@ export default function PostForm({ open, onClose }) {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">
-                  Website URL
-                </label>
+                <label className="block text-sm text-gray-400 mb-1">Website URL</label>
                 <input
                   type="url"
                   placeholder="https://example.com"
@@ -109,33 +86,13 @@ export default function PostForm({ open, onClose }) {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-1">
-                  Description / Reason
-                </label>
+                <label className="block text-sm text-gray-400 mb-1">Description / Reason</label>
                 <textarea
                   placeholder="Why do you think this site is phishing?"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full p-3 rounded-lg bg-[#101020] border border-indigo-700/40 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition h-28 resize-none"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">
-                  Optional Proof Image
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  required
-                  onChange={(e) => setImage(e.target.files[0])}
-                  className="text-sm text-gray-400"
-                />
-                {image && (
-                  <p className="text-xs text-indigo-400 mt-1 truncate">
-                    {image.name}
-                  </p>
-                )}
               </div>
 
               <button
