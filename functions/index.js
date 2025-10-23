@@ -1,7 +1,7 @@
 /**
- * ✅ PhishBlock — Web3 Hybrid Cloud Function
- * Anchors verified phishing reports to Polygon (Amoy Testnet)
- * and archives their metadata + image to IPFS via Web3.Storage.
+ * ✅ PhishBlock — Automated Archival & Cleanup
+ * Anchors verified phishing reports to Polygon and archives to IPFS
+ * with Web3.Storage + Pinata fallback and Firestore cleanup.
  */
 
 const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
@@ -10,38 +10,41 @@ const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { ethers } = require("ethers");
 const { Web3Storage, File } = require("web3.storage");
+// ⚙️ Universal fetch fix for Firebase Node runtimes
+const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const FormData = require("form-data");
+const fs = require("fs");
+const path = require("path");
 
-// Initialize Firebase Admin SDK
+// 🧩 Initialize Firebase Admin
 initializeApp();
 
 // ====== 🔧 ENVIRONMENT VARIABLES ======
 const RPC_URL = process.env.BLOCKCHAIN_RPC || "";
 const PRIVATE_KEY = process.env.BLOCKCHAIN_PRIVATE_KEY || "";
 const CONTRACT_ADDRESS = process.env.BLOCKCHAIN_CONTRACT_ADDRESS || "";
-const NFT_TOKEN = process.env.NFT_TOKEN || ""; // short key from app.nft.storage
+const NFT_TOKEN = process.env.NFT_TOKEN || "";
+const PINATA_JWT = process.env.PINATA_JWT || "";
 const VOTE_THRESHOLD = parseInt(process.env.VOTE_THRESHOLD || "10", 10);
 
-// Polygon smart contract ABI
 const CONTRACT_ABI = [
   "function anchor(bytes32 _hash, string calldata postId) public returns (bool)",
 ];
 
-// ====== 🚀 FIRESTORE TRIGGER ======
+// ====== 🔥 FIRESTORE TRIGGER ======
 exports.onPostUpdate = onDocumentUpdated(
   {
     document: "posts/{postId}",
     region: "asia-south1",
   },
   async (event) => {
+    const db = getFirestore();
     const newData = event.data.after.data();
     const oldData = event.data.before.data();
     const postId = event.params.postId;
 
-    logger.info(`🧩 Vote threshold: ${VOTE_THRESHOLD}`);
-
-    // Trigger anchoring only when threshold reached and not already anchored
     if (!oldData.anchored && (newData.upvotes || 0) >= VOTE_THRESHOLD) {
-      logger.info(`🚀 Anchoring post ${postId}...`);
+      logger.info(`🚀 Anchoring and archiving post ${postId}...`);
 
       try {
         // 1️⃣ Blockchain anchoring
@@ -52,96 +55,112 @@ exports.onPostUpdate = onDocumentUpdated(
         const hash = ethers.id(postId);
         const tx = await contract.anchor(hash, postId);
         await tx.wait();
+        logger.info(`✅ Anchored post ${postId}, tx: ${tx.hash}`);
 
-        logger.info(`✅ Anchored post ${postId} on-chain, tx: ${tx.hash}`);
-
-        // 2️⃣ Prepare JSON metadata
-        const postData = {
-          id: postId,
+        // 2️⃣ Prepare metadata
+        const metadata = {
+          postId,
           url: newData.url || "",
-          description: newData.description || "",
-          authorId: newData.authorId || "",
-          authorName: newData.authorName || "",
-          createdAt: newData.createdAt || new Date().toISOString(),
           upvotes: newData.upvotes || 0,
           downvotes: newData.downvotes || 0,
           anchored: true,
           anchorTx: tx.hash,
-          verification: {
-            network: "Polygon Amoy Testnet",
-            contract: CONTRACT_ADDRESS,
-            hash: ethers.id(postId),
-            anchoredAt: new Date().toISOString(),
-          },
-          decentralized: {
-            provider: "web3.storage",
-            uploadedAt: new Date().toISOString(),
-          },
+          createdAt: newData.createdAt || new Date().toISOString(),
         };
 
-        // 3️⃣ Create files for upload
-        const files = [new File([JSON.stringify(postData)], "post.json", { type: "application/json" })];
-
-        // Require an image before upload
-        if (!newData.imageURL || newData.imageURL.trim() === "") {
-          logger.error(`❌ Missing imageURL for post ${postId}. Skipping IPFS upload.`);
-          await getFirestore().collection("posts").doc(postId).update({
-            anchored: true,
-            anchorTx: tx.hash,
-            anchoringError: true,
-            lastError: "Missing imageURL — IPFS upload skipped.",
-            lastErrorAt: FieldValue.serverTimestamp(),
-          });
-          return;
+        // Fetch image for IPFS
+        let imageBuffer = null;
+        if (newData.imageURL) {
+          try {
+            const imgRes = await fetch(newData.imageURL);
+            if (imgRes.ok) {
+              imageBuffer = Buffer.from(await imgRes.arrayBuffer());
+            }
+          } catch (e) {
+            logger.error(`⚠️ Failed to fetch image for ${postId}:`, e);
+          }
         }
 
-        // Fetch the image and attach
-        const res = await fetch(newData.imageURL);
-        if (res.ok) {
-          const buffer = Buffer.from(await res.arrayBuffer());
-          files.push(new File([buffer], "image.jpg", { type: "image/jpeg" }));
-          logger.info(`🖼️ Attached image for post ${postId}`);
-        } else {
-          logger.error(`⚠️ Failed to fetch image for ${postId}: ${res.status}`);
+        const files = [new File([JSON.stringify(metadata, null, 2)], "metadata.json")];
+        if (imageBuffer) {
+          files.push(new File([imageBuffer], "proof.jpg"));
         }
 
-        // 4️⃣ Upload to IPFS via Web3.Storage
+        // 3️⃣ Upload to Web3.Storage (primary)
         const client = new Web3Storage({ token: NFT_TOKEN });
+        let cid = null;
+
         try {
-          const cid = await client.put(files);
-          logger.info(`📦 Archived post ${postId} to IPFS: ${cid}`);
+          cid = await client.put(files, { wrapWithDirectory: false });
+          logger.info(`📦 Uploaded to Web3.Storage: ${cid}`);
+        } catch (err) {
+          logger.error(`❌ Web3.Storage upload failed:`, err);
 
-          // 5️⃣ Update Firestore metadata
-          await getFirestore().collection("posts").doc(postId).update({
-            anchored: true,
-            anchorTx: tx.hash,
-            archived: true,
-            archivedAt: FieldValue.serverTimestamp(),
-            anchoringError: false,
-            decentralized: { provider: "web3.storage", cid },
-          });
+          // 4️⃣ Fallback to Pinata
+          if (!PINATA_JWT) throw new Error("No Pinata JWT provided");
+          try {
+            const tempFile = path.join("/tmp", `${postId}-metadata.json`);
+            fs.writeFileSync(tempFile, JSON.stringify(metadata, null, 2));
 
-          logger.info(`✅ Firestore updated for post ${postId}`);
-        } catch (uploadErr) {
-          logger.error(`❌ NFT upload failed for ${postId}:`, uploadErr);
-          await getFirestore().collection("posts").doc(postId).update({
-            anchored: true,
-            anchorTx: tx.hash,
-            anchoringError: true,
-            lastError: uploadErr.message || "IPFS upload failed",
-            lastErrorAt: FieldValue.serverTimestamp(),
-          });
+            const form = new FormData();
+            form.append("file", fs.createReadStream(tempFile));
+            const res = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${PINATA_JWT}` },
+              body: form,
+            });
+            const data = await res.json();
+            fs.unlinkSync(tempFile);
+
+            if (!res.ok || !data.IpfsHash) {
+              throw new Error("Pinata upload failed: " + JSON.stringify(data));
+            }
+            cid = data.IpfsHash;
+            logger.info(`✅ Pinata fallback success: ${cid}`);
+          } catch (fallbackErr) {
+            logger.error(`❌ Both Web3.Storage and Pinata failed:`, fallbackErr);
+            await db.collection("posts").doc(postId).update({
+              anchored: true,
+              anchorTx: tx.hash,
+              anchoringError: true,
+              lastError: fallbackErr.message,
+              lastErrorAt: FieldValue.serverTimestamp(),
+            });
+            return;
+          }
         }
+
+        // 5️⃣ Construct gateway links
+        const ipfsGateway = `https://gateway.pinata.cloud/ipfs/${cid}`;
+        const backupLink = `https://w3s.link/ipfs/${cid}`;
+
+        // 6️⃣ Cleanup Firestore document
+        const minimalData = {
+          url: newData.url || "",
+          anchored: true,
+          anchorTx: tx.hash,
+          archiveCid: cid,
+          archivedAt: FieldValue.serverTimestamp(),
+          ipfsGateway,
+          backupLink,
+          upvotes: newData.upvotes || 0,
+          downvotes: newData.downvotes || 0,
+        };
+
+        await db.collection("posts").doc(postId).set(minimalData, { merge: false });
+
+        logger.info(`🧹 Firestore cleaned and updated for post ${postId}`);
+
       } catch (err) {
-        logger.error(`❌ Blockchain or upload error for ${postId}:`, err);
+        logger.error(`❌ Error in anchoring/archive for ${postId}:`, err);
         await getFirestore().collection("posts").doc(postId).update({
           anchoringError: true,
-          lastError: err.message || "Blockchain anchoring failed",
+          lastError: err.message || "Unknown failure",
           lastErrorAt: FieldValue.serverTimestamp(),
         });
       }
     } else {
-      logger.debug(`ℹ️ Skipped ${postId} — already anchored or below threshold`);
+      logger.debug(`ℹ️ Skipping post ${postId} — below threshold or already anchored.`);
     }
   }
 );
