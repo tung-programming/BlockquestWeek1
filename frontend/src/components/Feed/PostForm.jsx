@@ -27,6 +27,10 @@ export default function PostForm({ open, onClose }) {
       alert("Please fill in both URL and description.");
       return;
     }
+    if (!image) {
+      alert("Please attach a proof image before submitting!");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -123,6 +127,7 @@ export default function PostForm({ open, onClose }) {
                 <input
                   type="file"
                   accept="image/*"
+                  required
                   onChange={(e) => setImage(e.target.files[0])}
                   className="text-sm text-gray-400"
                 />

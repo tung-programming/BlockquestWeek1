@@ -19,9 +19,10 @@ import { useAuth } from "../../hooks/useAuth";
 export default function PostCard() {
   const { user } = useAuth();
   const [posts, setPosts] = useState([]);
-  const [userVotes, setUserVotes] = useState({}); // track current user’s votes locally
+  const [userVotes, setUserVotes] = useState({});
   const [selectedImage, setSelectedImage] = useState(null);
-  // Fetch posts live
+
+  // ✅ Fetch posts live
   useEffect(() => {
     const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -35,7 +36,7 @@ export default function PostCard() {
     return () => unsubscribe();
   }, []);
 
-  // Fetch user votes for all posts (on login)
+  // ✅ Fetch user votes for all posts (on login)
   useEffect(() => {
     if (!user) return;
     const unsubscribes = [];
@@ -59,7 +60,28 @@ export default function PostCard() {
     return () => unsubscribes.forEach((u) => u());
   }, [user, posts]);
 
-  // Vote handling logic
+  // ✅ Fetch archived content from IPFS if needed
+  useEffect(() => {
+    async function fetchArchived(post) {
+      if (post.archived && post.decentralized?.cid && !post.description) {
+        try {
+          const res = await fetch(`https://ipfs.io/ipfs/${post.decentralized.cid}/post.json`);
+          const data = await res.json();
+          post.description = data.desc || "";
+          post.imageURL = `https://ipfs.io/ipfs/${post.decentralized.cid}/image.jpg`;
+          setPosts((prev) =>
+            prev.map((p) => (p.id === post.id ? { ...p, ...post } : p))
+          );
+        } catch (e) {
+          console.error("Error fetching IPFS content", e);
+        }
+      }
+    }
+
+    posts.forEach((p) => fetchArchived(p));
+  }, [posts]);
+
+  // ✅ Vote handling logic
   const handleVote = async (postId, type) => {
     if (!user) return alert("Please log in to vote.");
     const postRef = doc(db, "posts", postId);
@@ -76,7 +98,6 @@ export default function PostCard() {
       let newUpvotes = postData.upvotes || 0;
       let newDownvotes = postData.downvotes || 0;
 
-      // If the user clicks the same vote again → remove vote
       if (prevVote === 1 && type === "upvote") {
         newUpvotes -= 1;
         transaction.update(postRef, { upvotes: newUpvotes });
@@ -91,7 +112,6 @@ export default function PostCard() {
         return;
       }
 
-      // If switching from upvote to downvote or vice versa
       if (prevVote === 1 && type === "downvote") {
         newUpvotes -= 1;
         newDownvotes += 1;
@@ -114,7 +134,6 @@ export default function PostCard() {
         return;
       }
 
-      // If first time voting
       if (prevVote === 0 && type === "upvote") {
         newUpvotes += 1;
         transaction.update(postRef, { upvotes: newUpvotes });
@@ -131,7 +150,7 @@ export default function PostCard() {
     });
   };
 
-  // Share URL
+  // ✅ Share URL
   const handleShare = (postUrl) => {
     navigator.clipboard.writeText(postUrl);
     alert("Post URL copied to clipboard!");
@@ -179,6 +198,7 @@ export default function PostCard() {
             <p className="text-gray-300 text-sm mb-3">
               {post.description || "No description provided."}
             </p>
+
             {/* ✅ Image Preview (clickable) */}
             {post.imageURL && (
               <div
@@ -190,6 +210,41 @@ export default function PostCard() {
                   alt="Post"
                   className="w-full object-cover max-h-64"
                 />
+              </div>
+            )}
+
+            {/* ✅ Anchored / View on IPFS */}
+            {post.anchored && post.decentralized?.cid && (
+              <div className="mt-3 flex items-center justify-between text-xs text-indigo-400">
+                <div className="flex items-center gap-1">
+                  ✅ <span>Verified & Archived</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() =>
+                      window.open(
+                        `https://ipfs.io/ipfs/${post.decentralized.cid}/post.json`,
+                        "_blank"
+                      )
+                    }
+                    className="text-indigo-400 hover:text-indigo-300 underline"
+                  >
+                    View on IPFS
+                  </button>
+                  {post.anchorTx && (
+                    <button
+                      onClick={() =>
+                        window.open(
+                          `https://amoy.polygonscan.com/tx/${post.anchorTx}`,
+                          "_blank"
+                        )
+                      }
+                      className="text-green-400 hover:text-green-300 underline"
+                    >
+                      View on Blockchain
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -240,6 +295,7 @@ export default function PostCard() {
           </motion.div>
         );
       })}
+
       {/* ✅ Image Modal */}
       <ImageModal
         imageURL={selectedImage}
