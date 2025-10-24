@@ -79,7 +79,7 @@ export default function SearchDropdown({ searchQuery, onClose }) {
                 key={item.id}
                 onClick={() => {
                   if (item.type === "post") navigate(`/post/${item.id}`);
-                  else navigate(`/profile/${item.id}`);
+                  else navigate(`/profile/${item.id}`); 
                   onClose();
                 }}
                 className="px-4 py-2 text-sm text-gray-300 hover:bg-[#11111a] cursor-pointer transition flex flex-col"

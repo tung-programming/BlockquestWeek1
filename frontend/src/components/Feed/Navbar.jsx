@@ -139,7 +139,7 @@ export default function Navbar({ onToggleSidebar, onCreate }) {
                     <button
                       onClick={() => {
                         setMenuOpen(false);
-                        navigate("/profile");
+                        if (user?.uid) navigate(`/profile`); // ✅ always navigate to your UID route
                       }}
                       className="w-full text-left px-4 py-2 hover:bg-[#101018]"
                     >

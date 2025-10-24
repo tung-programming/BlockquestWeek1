@@ -131,7 +131,7 @@ export default function RightPanel() {
         </div>
 
         <button
-          onClick={() => navigate("/profile/:uid")}
+          onClick={() => navigate("/profile")}
           className="w-full mt-2 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-indigo-700 font-semibold hover:shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all duration-300 text-sm"
         >
           View Full Profile
