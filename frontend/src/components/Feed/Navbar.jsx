@@ -1,32 +1,45 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { HiOutlineMenu } from "react-icons/hi";
 import { FiSearch } from "react-icons/fi";
 import { IoNotificationsOutline } from "react-icons/io5";
-import {useAuth} from "../../hooks/useAuth";
-import { signOut } from "firebase/auth";
-import { auth } from "../../firebase/firebase";
+import { useAuth } from "../../hooks/useAuth";
+import { signOut, updateProfile } from "firebase/auth";
+import { auth, db } from "../../firebase/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
+import SearchDropdown from "../SearchDropdown";
 
-/**
- * Navbar:
- * - left: hamburger (toggles sidebar), brand
- * - center: search input (desktop)
- * - right: notifications, profile avatar (dropdown)
- *
- * Props:
- * - onToggleSidebar: function to open the left drawer on mobile
- */
 export default function Navbar({ onToggleSidebar, onCreate }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const { user } = useAuth(); // expects { user } or null
+  const { user } = useAuth();
+  const [photoURL, setPhotoURL] = useState(user?.photoURL || "");
+
+  // 🧠 Sync profile image with Firestore updates
+  useEffect(() => {
+    if (!user?.uid) return;
+    const ref = doc(db, "users", user.uid);
+    const unsub = onSnapshot(ref, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.photoURL && data.photoURL !== photoURL) {
+          setPhotoURL(data.photoURL);
+          // Also sync Firebase Auth for instant reflection
+          updateProfile(auth.currentUser, { photoURL: data.photoURL }).catch(
+            () => {}
+          );
+        }
+      }
+    });
+    return () => unsub();
+  }, [user?.uid, photoURL]);
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      navigate("/"); // return to landing or login
+      navigate("/");
     } catch (err) {
       console.error(err);
       alert("Logout failed");
@@ -54,18 +67,24 @@ export default function Navbar({ onToggleSidebar, onCreate }) {
             </div>
           </div>
 
-          {/* Center: search (hidden on small screens) */}
+          {/* Center: search */}
           <div className="hidden md:flex items-center flex-1 justify-center px-6">
             <div className="w-full max-w-xl">
               <div className="relative">
-                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search reports, domains, users..."
-                  className="w-full pl-10 pr-4 py-2 rounded-full bg-[#0b0b0d]/70 border border-gray-800 placeholder:text-gray-500 text-gray-200 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search reports, domains, users..."
+                className="w-full pl-10 pr-4 py-2 rounded-full bg-[#0b0b0d]/70 border border-gray-800 placeholder:text-gray-500 text-gray-200 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+              />
+              {search && (
+                <SearchDropdown
+                  searchQuery={search}
+                  onClose={() => setSearch("")}
                 />
-              </div>
+              )}
+            </div>
             </div>
           </div>
 
@@ -78,7 +97,10 @@ export default function Navbar({ onToggleSidebar, onCreate }) {
               Create
             </button>
 
-            <button className="p-2 rounded-md hover:bg-[#0f1118]/50 transition" title="Notifications">
+            <button
+              className="p-2 rounded-md hover:bg-[#0f1118]/50 transition"
+              title="Notifications"
+            >
               <IoNotificationsOutline className="text-xl text-gray-200" />
             </button>
 
@@ -88,14 +110,23 @@ export default function Navbar({ onToggleSidebar, onCreate }) {
                 onClick={() => setMenuOpen((s) => !s)}
                 className="flex items-center gap-2 rounded-full py-1 px-2 hover:bg-[#0f1118]/60 transition"
               >
-                <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-bold">
-                  {user?.displayName ? user.displayName[0].toUpperCase() : "U"}
-                </div>
+                {photoURL ? (
+                  <img
+                    src={photoURL}
+                    alt="avatar"
+                    className="w-8 h-8 rounded-full object-cover border border-indigo-500 shadow-sm"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-bold">
+                    {user?.displayName ? user.displayName[0].toUpperCase() : "U"}
+                  </div>
+                )}
                 <div className="hidden md:block text-sm text-gray-200">
                   {user?.displayName || "User"}
                 </div>
               </button>
 
+              {/* Dropdown */}
               <AnimatePresence>
                 {menuOpen && (
                   <motion.div
@@ -108,7 +139,7 @@ export default function Navbar({ onToggleSidebar, onCreate }) {
                     <button
                       onClick={() => {
                         setMenuOpen(false);
-                        navigate(`/profile/${user?.uid}`);
+                        navigate("/profile");
                       }}
                       className="w-full text-left px-4 py-2 hover:bg-[#101018]"
                     >

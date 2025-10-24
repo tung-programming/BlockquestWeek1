@@ -15,6 +15,7 @@ import {
   getDoc,
   serverTimestamp,
 } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -29,7 +30,7 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
-
+export const storage = getStorage(app);
 // Auto-create user doc on signup
 export const createUserProfile = async (user) => {
   const userRef = doc(db, "users", user.uid);
