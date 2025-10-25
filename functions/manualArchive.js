@@ -107,7 +107,7 @@ async function main() {
   const metadata = {
     postId,
     author: post.authorName ?? post.author ?? "unknown",
-    description: post.description ?? "",
+    description: post.description,
     url: post.url ?? "",
     image: post.imageURL ?? "",
     upvotes: post.upvotes ?? 0,

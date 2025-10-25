@@ -7,24 +7,63 @@ import { FaTimes } from "react-icons/fa";
 
 export default function PostForm({ open, onClose }) {
   const { user } = useAuth();
+  const [type, setType] = useState("url"); // "url" or "wallet"
   const [url, setUrl] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const isValidWallet = (val) => {
+    // basic Ethereum address check: 0x + 40 hex chars
+    return /^0x[a-fA-F0-9]{40}$/.test(val.trim());
+  };
+
+  const isValidUrl = (val) => {
+    try {
+      // ensure it has a protocol; the native URL check is good and robust
+      const u = new URL(val.trim());
+      return u.protocol === "http:" || u.protocol === "https:";
+    } catch {
+      return false;
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!user) return alert("Please log in to create a post.");
 
-    if (!url || !description) {
-      alert("Please fill in both URL and description.");
+    // require description as before
+    if (!description.trim()) {
+      alert("Please provide a description / reason.");
       return;
+    }
+
+    if (!url.trim()) {
+      alert(`Please provide a ${type === "url" ? "website URL" : "wallet address"}.`);
+      return;
+    }
+
+    // validation based on chosen type
+    if (type === "url") {
+      if (!isValidUrl(url)) {
+        alert("Please enter a valid URL (must include http:// or https://).");
+        return;
+      }
+    } else {
+      // wallet
+      if (!isValidWallet(url)) {
+        const confirmSave = window.confirm(
+          "The wallet address doesn't match the basic 0x.. pattern. Do you still want to submit it as provided?"
+        );
+        if (!confirmSave) return;
+      }
+      // NOTE: we still save wallet into the same `url` field as requested
     }
 
     setLoading(true);
     try {
       await addDoc(collection(db, "posts"), {
-        url,
-        description,
+        url: url.trim(),
+        description: description.trim(),
         // no image
         authorId: user.uid,
         authorName: user.displayName || user.email.split("@")[0],
@@ -37,10 +76,11 @@ export default function PostForm({ open, onClose }) {
 
       setUrl("");
       setDescription("");
+      setType("url");
       onClose();
     } catch (err) {
       console.error(err);
-      alert("Error submitting post: " + err.message);
+      alert("Error submitting post: " + (err?.message || err));
     } finally {
       setLoading(false);
     }
@@ -74,15 +114,48 @@ export default function PostForm({ open, onClose }) {
             </h3>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Type toggle */}
+              <div className="flex items-center gap-3 justify-center">
+                <button
+                  type="button"
+                  onClick={() => setType("url")}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm transition ${
+                    type === "url"
+                      ? "bg-indigo-600 text-white shadow-[0_6px_18px_rgba(99,102,241,0.18)]"
+                      : "bg-[#0f1020] text-gray-300 border border-indigo-800/40 hover:bg-[#121225]"
+                  }`}
+                >
+                  Website URL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setType("wallet")}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm transition ${
+                    type === "wallet"
+                      ? "bg-indigo-600 text-white shadow-[0_6px_18px_rgba(99,102,241,0.18)]"
+                      : "bg-[#0f1020] text-gray-300 border border-indigo-800/40 hover:bg-[#121225]"
+                  }`}
+                >
+                  Wallet Address
+                </button>
+              </div>
+
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Website URL</label>
+                <label className="block text-sm text-gray-400 mb-1">
+                  {type === "url" ? "Website URL" : "Wallet Address"}
+                </label>
                 <input
-                  type="url"
-                  placeholder="https://example.com"
+                  type="text"
+                  placeholder={type === "url" ? "https://example.com" : "0x1234... (Ethereum / Polygon address)"}
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   className="w-full p-3 rounded-lg bg-[#101020] border border-indigo-700/40 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  {type === "url"
+                    ? "Include the full URL (must start with http:// or https://)."
+                    : "Provide the full wallet address (0x...); ENS names are not validated here."}
+                </p>
               </div>
 
               <div>

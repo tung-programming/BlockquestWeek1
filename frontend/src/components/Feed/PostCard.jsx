@@ -21,18 +21,9 @@ import {
 import { useAuth } from "../../hooks/useAuth";
 import { useBlockchainTx } from "../../hooks/useBlockchainTx";
 
-// ==========================
-// CHILD COMPONENT (handles 1 post)
-// ==========================
 function PostCardItem({ post, user, userVote, onVote, onShare }) {
   const [showChain, setShowChain] = useState(false);
   const txInfo = useBlockchainTx(post.anchorTx);
-
-  const preview =
-    post.description ||
-    post.snapshotText ||
-    post.snapshot ||
-    "No description provided.";
 
   return (
     <motion.div
@@ -62,8 +53,12 @@ function PostCardItem({ post, user, userVote, onVote, onShare }) {
         )}
       </div>
 
-      {/* Preview */}
-      <p className="text-gray-300 text-sm mb-3">{preview}</p>
+      {/* Description / IPFS note */}
+      <p className="text-gray-300 text-sm mb-3">
+        {post.anchored
+          ? "Reporter name and description are permanently stored on IPFS."
+          : post.description || "No description provided."}
+      </p>
 
       {/* Quick Access Links */}
       {post.anchored && (
@@ -77,7 +72,6 @@ function PostCardItem({ post, user, userVote, onVote, onShare }) {
                 🌐 View on IPFS
               </button>
             )}
-
             {post.backupLink && (
               <button
                 onClick={() => window.open(post.backupLink, "_blank")}
@@ -86,7 +80,6 @@ function PostCardItem({ post, user, userVote, onVote, onShare }) {
                 🗂️ Backup (w3s.link)
               </button>
             )}
-
             {post.anchorTxUrl && (
               <button
                 onClick={() => window.open(post.anchorTxUrl, "_blank")}
@@ -115,7 +108,6 @@ function PostCardItem({ post, user, userVote, onVote, onShare }) {
               <div className="flex items-center gap-2 text-indigo-400 font-semibold mb-2">
                 <FaCube /> Blockchain Record
               </div>
-
               <p>
                 <strong>Tx Hash:</strong>{" "}
                 <a
@@ -140,22 +132,6 @@ function PostCardItem({ post, user, userVote, onVote, onShare }) {
                   </span>
                 </p>
               )}
-
-              {/* Animated chain visualization */}
-              <div className="flex gap-1 mt-3 justify-center">
-                {[...Array(5)].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    animate={{ scale: [1, 1.2, 1], opacity: [0.6, 1, 0.6] }}
-                    transition={{
-                      duration: 1.2,
-                      delay: i * 0.2,
-                      repeat: Infinity,
-                    }}
-                    className="w-3 h-3 bg-indigo-500 rounded-sm"
-                  />
-                ))}
-              </div>
             </motion.div>
           )}
         </div>
@@ -174,7 +150,6 @@ function PostCardItem({ post, user, userVote, onVote, onShare }) {
           >
             <FaArrowUp /> {post.upvotes || 0}
           </button>
-
           <button
             onClick={() => onVote(post.id, "downvote")}
             className={`flex items-center gap-1 ${
@@ -185,12 +160,10 @@ function PostCardItem({ post, user, userVote, onVote, onShare }) {
           >
             <FaArrowDown /> {post.downvotes || 0}
           </button>
-
           <button className="flex items-center gap-1 hover:text-indigo-400 transition">
             <FaComment /> {post.commentsCount || 0}
           </button>
         </div>
-
         <button
           onClick={() => onShare(post.url)}
           className="flex items-center gap-1 hover:text-indigo-400 transition"
@@ -199,10 +172,12 @@ function PostCardItem({ post, user, userVote, onVote, onShare }) {
         </button>
       </div>
 
-      {/* author + timestamp */}
+      {/* Author + Timestamp */}
       <div className="mt-4 text-xs text-gray-500">
         Posted by{" "}
-        <span className="text-indigo-400">{post.authorName || "Unknown"}</span>{" "}
+        <span className="text-indigo-400">
+          {post.authorName || "Unknown"}
+        </span>{" "}
         on{" "}
         {post.createdAt?.toDate?.().toLocaleString
           ? post.createdAt.toDate().toLocaleString()
@@ -212,9 +187,6 @@ function PostCardItem({ post, user, userVote, onVote, onShare }) {
   );
 }
 
-// ==========================
-// MAIN FEED COMPONENT
-// ==========================
 export default function PostCard() {
   const { user } = useAuth();
   const [posts, setPosts] = useState([]);
