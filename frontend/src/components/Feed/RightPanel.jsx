@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { FaFire, FaCheckCircle } from "react-icons/fa";
+import { FaFire, FaCheckCircle, FaClock } from "react-icons/fa";
 import { db } from "../../firebase/firebase";
-import { useAuth } from "../../hooks/useAuth";
 import {
   collection,
   query,
@@ -11,44 +10,14 @@ import {
   orderBy,
   limit,
   onSnapshot,
-  getCountFromServer,
-  doc,
-  getDoc,
 } from "firebase/firestore";
 
 export default function RightPanel() {
-  const { user } = useAuth();
   const navigate = useNavigate();
-
   const [trendingPosts, setTrendingPosts] = useState([]);
   const [anchoredPosts, setAnchoredPosts] = useState([]);
-  const [userData, setUserData] = useState(null);
-  const [postCount, setPostCount] = useState(0);
   const [loading, setLoading] = useState(true);
-
-  // 🧠 Fetch User Info + Posts Count
-  useEffect(() => {
-    if (!user) return;
-
-    async function fetchUserData() {
-      try {
-        // User Info
-        const userRef = doc(db, "users", user.uid);
-        const snap = await getDoc(userRef);
-        if (snap.exists()) setUserData(snap.data());
-
-        // Posts Count
-        const postsRef = collection(db, "posts");
-        const postsQuery = query(postsRef, where("authorId", "==", user.uid));
-        const snapshot = await getCountFromServer(postsQuery);
-        setPostCount(snapshot.data().count);
-      } catch (err) {
-        console.error("Error loading profile data:", err);
-      }
-    }
-
-    fetchUserData();
-  }, [user]);
+  const [currentTime, setCurrentTime] = useState("");
 
   // 🔥 Trending & ⛓️ Anchored (Real-time)
   useEffect(() => {
@@ -81,68 +50,37 @@ export default function RightPanel() {
     };
   }, []);
 
+  // 🕒 Real-time clock (updates every second)
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      const formatted = now.toLocaleString("en-IN", {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      setCurrentTime(formatted);
+    };
+
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const showTrending = trendingPosts || [];
   const showAnchored = anchoredPosts || [];
 
   return (
     <div className="sticky top-20 space-y-6 p-4">
-      {/* USER SNAPSHOT */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="bg-[#0d0d12]/80 border border-indigo-800/40 rounded-2xl p-5 shadow-[0_0_20px_rgba(99,102,241,0.15)] backdrop-blur-md"
-      >
-        <h3 className="text-lg font-semibold text-white mb-3">Your Profile</h3>
-
-        <div className="flex items-center gap-3 mb-3">
-          {userData?.photoURL || user?.photoURL ? (
-            <img
-              src={userData?.photoURL || user?.photoURL}
-              alt="avatar"
-              className="w-10 h-10 rounded-full object-cover border border-indigo-500"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-lg">
-              {user?.displayName ? user.displayName[0].toUpperCase() : "U"}
-            </div>
-          )}
-
-          <div>
-            <div className="text-white font-medium text-sm">
-              {user?.displayName || "Guest User"}
-            </div>
-            <div className="text-xs text-gray-400">
-              {user?.email || "Not signed in"}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between text-sm text-gray-300 mb-2">
-          <span>Badges</span>
-          <span className="font-semibold text-indigo-400">
-            {userData?.badges?.length || 0}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between text-sm text-gray-300 mb-3">
-          <span>Posts</span>
-          <span className="font-semibold text-indigo-400">{postCount}</span>
-        </div>
-
-        <button
-          onClick={() => navigate("/profile")}
-          className="w-full mt-2 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-indigo-700 font-semibold hover:shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all duration-300 text-sm"
-        >
-          View Full Profile
-        </button>
-      </motion.div>
-
       {/* 🔥 TRENDING REPORTS */}
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.4 }}
+        transition={{ duration: 0.4 }}
         className="bg-[#0d0d12]/80 border border-indigo-800/40 rounded-2xl p-5 shadow-[0_0_20px_rgba(99,102,241,0.15)] backdrop-blur-md"
       >
         <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
@@ -175,7 +113,7 @@ export default function RightPanel() {
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2, duration: 0.4 }}
+        transition={{ delay: 0.1, duration: 0.4 }}
         className="bg-[#0d0d12]/80 border border-indigo-800/40 rounded-2xl p-5 shadow-[0_0_20px_rgba(99,102,241,0.15)] backdrop-blur-md"
       >
         <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
@@ -211,7 +149,22 @@ export default function RightPanel() {
         )}
       </motion.div>
 
-      <p className="text-[10px] text-gray-500 text-center mt-6">
+      {/* 🕒 REAL-TIME DATE & TIME */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3 }}
+        className="bg-[#0d0d12]/80 border border-indigo-800/40 rounded-2xl p-4 shadow-[0_0_20px_rgba(99,102,241,0.15)] text-center text-xs text-gray-400"
+      >
+        <div className="flex flex-col items-center gap-2">
+          <FaClock className="text-indigo-400 text-base" />
+          <div className="text-[11px] font-mono tracking-wide text-gray-300">
+            {currentTime}
+          </div>
+        </div>
+      </motion.div>
+
+      <p className="text-[10px] text-gray-500 text-center mt-4">
         © 2025 PhishBlock — powered by community & blockchain.
       </p>
     </div>
