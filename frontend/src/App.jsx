@@ -8,6 +8,10 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import PostForm from "./components/Feed/PostForm";
 import UserProfile from "./pages/UserProfile";
+import Domains from "./pages/Domains";
+import Tools from "./pages/Tools";
+import Anchors from "./pages/Anchors";
+
 export default function App(){
   return (
     <BrowserRouter>
@@ -20,6 +24,9 @@ export default function App(){
         <Route path="/signup" element={<Signup />} />
         <Route path="/post/create" element={<PostForm />} />
         <Route path="/profile/:uid" element={<UserProfile />} />
+        <Route path="/domains" element={<Domains />} />
+        <Route path="/tools" element={<Tools />} />
+        <Route path="/anchors" element={<Anchors />} />
 
       </Routes>
     </BrowserRouter>

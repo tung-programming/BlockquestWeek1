@@ -238,3 +238,6 @@ exports.onPostUpdate = onDocumentUpdated(
     }
   }
 );
+
+exports.safeTools = require("./safeTools").safeTools;
+

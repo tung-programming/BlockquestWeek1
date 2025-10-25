@@ -68,3 +68,4 @@ node_modules/
 .env.phishblock-demo
 # dataconnect generated files
 .dataconnect
+.env.phishblock-demo.local
